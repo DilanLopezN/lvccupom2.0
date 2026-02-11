@@ -1,4 +1,3 @@
-// src/app/s/[token]/page.tsx - VERSÃO CORRIGIDA
 'use client'
 
 import { useEffect, useState } from 'react'

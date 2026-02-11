@@ -1,4 +1,4 @@
-// src/app/api/share/[token]/redeem/route.ts
+'use client'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { redeemCouponSchema } from '@/lib/validations'
