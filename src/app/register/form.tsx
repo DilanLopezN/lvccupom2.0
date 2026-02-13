@@ -40,21 +40,27 @@ export function RegisterForm() {
     e.preventDefault()
     setError(null)
 
-    // Se NÃO tem paymentId, abrir modal de compra
+    // Validar senhas antes de qualquer coisa
+    if (formData.password !== formData.confirmPassword) {
+      setError('As senhas não conferem')
+      return
+    }
+
+    if (formData.password.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres')
+      return
+    }
+
+    // Se NÃO tem paymentId, abrir modal de compra (passando dados do form)
     if (!formData.paymentId) {
       setShowPricingModal(true)
       return
     }
 
+    // Se TEM paymentId (veio pela URL), fazer registro normal
     setLoading(true)
 
     try {
-      if (formData.password !== formData.confirmPassword) {
-        setError('As senhas não conferem')
-        setLoading(false)
-        return
-      }
-
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -201,10 +207,19 @@ export function RegisterForm() {
         </div>
       </div>
 
-      {/* Modal de Planos - abre quando tenta registrar sem pagamento */}
+      {/* Modal de Planos - passa dados do registro para reaproveitar */}
       <PricingModal
         isOpen={showPricingModal}
         onClose={() => setShowPricingModal(false)}
+        registerData={{
+          name: formData.name,
+          email: formData.email,
+          password: formData.password
+        }}
+        onPaymentSuccess={() => {
+          // Auto-registro já é feito dentro do PricingModal
+          // Este callback é chamado após sucesso
+        }}
       />
     </div>
   )

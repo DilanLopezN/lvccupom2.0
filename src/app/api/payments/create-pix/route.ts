@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
         if (asaasPayment.status === 'PENDING') {
           const pixData = await asaas.getPixQrCode(existingPayment.paymentId)
 
+          console.log('PIXDATA', pixData)
           return NextResponse.json({
             paymentId: existingPayment.paymentId,
             qrCode: pixData.payload,
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
       }
     })
 
+    console.log('PAYDATA', payment)
     return NextResponse.json({
       paymentId: payment.paymentId,
       qrCode: pixPayment.qrCode,
