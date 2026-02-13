@@ -2,13 +2,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { abacatePayClient } from '@/lib/abacatepay'
+import { asaasClient } from '@/lib/asaas'
 import { plans } from '@/constants/plans'
 
 const createPixSchema = z.object({
   customerName: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   customerEmail: z.string().email('Email inválido'),
-  customerDocument: z.string().optional(),
+  customerDocument: z.string().min(11, 'CPF é obrigatório'), // cpfCnpj obrigatório no Asaas
   customerPhone: z.string().optional(),
   planType: z.enum(['base', 'premium', 'vip']).default('base')
 })
@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    // Validar dados de entrada
     const validationResult = createPixSchema.safeParse(body)
 
     if (!validationResult.success) {
@@ -48,28 +47,39 @@ export async function POST(req: NextRequest) {
         customerEmail,
         planType,
         status: 'pending',
-        expiresAt: {
-          gt: new Date()
-        }
+        expiresAt: { gt: new Date() }
       }
     })
 
     if (existingPayment) {
-      // Retornar o pagamento existente
-      const abacatePayment = await abacatePayClient.getPayment(
-        existingPayment.paymentId
-      )
+      try {
+        // Verificar se ainda está pendente no Asaas
+        const asaasPayment = await asaasClient.getPayment(
+          existingPayment.paymentId
+        )
 
-      return NextResponse.json({
-        paymentId: existingPayment.paymentId,
-        qrCode: abacatePayment.data.brCode,
-        qrCodeBase64: abacatePayment.data.brCodeBase64,
-        copyPaste: abacatePayment.data.brCode,
-        amount: existingPayment.amount,
-        expiresAt: existingPayment.expiresAt,
-        status: existingPayment.status,
-        planType: existingPayment.planType
-      })
+        if (asaasPayment.status === 'PENDING') {
+          // Rebuscar o QR Code
+          const pixData = await asaasClient.getPixQrCode(
+            existingPayment.paymentId
+          )
+
+          console.log('pix data', pixData)
+
+          return NextResponse.json({
+            paymentId: existingPayment.paymentId,
+            qrCode: pixData.payload,
+            qrCodeBase64: `data:image/png;base64,${pixData.encodedImage}`,
+            copyPaste: pixData.payload,
+            amount: existingPayment.amount,
+            expiresAt: existingPayment.expiresAt,
+            status: existingPayment.status,
+            planType: existingPayment.planType
+          })
+        }
+      } catch (err) {
+        console.log('Pagamento existente expirado ou erro, criando novo...')
+      }
     }
 
     // Obter dados do plano
@@ -83,50 +93,49 @@ export async function POST(req: NextRequest) {
 
     const amount = PLAN_PRICES[planType]
 
-    // Criar novo pagamento no AbacatePay
-    const pixPayment = await abacatePayClient.createPixPayment({
+    // Criar novo pagamento no Asaas
+    const pixPayment = await asaasClient.createPixPayment({
       amount,
-      expiresIn: 3600, // 1 hora em segundos
+      expiresInSeconds: 3600, // 1 hora
       description: `Plano ${selectedPlan.name} - Cupons de Amor`,
       customer: {
         name: customerName,
         email: customerEmail,
-        cellphone: customerPhone,
-        taxId: customerDocument
+        cpfCnpj: customerDocument, // obrigatório no Asaas
+        mobilePhone: customerPhone
       }
     })
-
-    // Verificar se houve erro na resposta
-    if (pixPayment.error) {
-      throw new Error(pixPayment.error)
-    }
 
     // Salvar no banco de dados
     const payment = await prisma.payment.create({
       data: {
-        paymentId: pixPayment.data.id,
+        paymentId: pixPayment.paymentId,
         customerEmail,
         customerName,
         amount,
         status: 'pending',
         planType,
-        expiresAt: new Date(pixPayment.data.expiresAt)
+        expiresAt: new Date(pixPayment.expiresAt)
       }
     })
 
     return NextResponse.json({
       paymentId: payment.paymentId,
-      qrCode: pixPayment.data.brCode,
-      qrCodeBase64: pixPayment.data.brCodeBase64,
-      copyPaste: pixPayment.data.brCode,
+      qrCode: pixPayment.qrCode,
+      qrCodeBase64: pixPayment.qrCodeBase64,
+      copyPaste: pixPayment.qrCode,
       amount: payment.amount,
       expiresAt: payment.expiresAt,
       status: payment.status,
       planType: payment.planType,
-      planName: selectedPlan.name
+      planName: selectedPlan.name,
+      invoiceUrl: pixPayment.invoiceUrl
     })
-  } catch (error) {
-    console.error('Erro ao criar pagamento PIX:', error)
+  } catch (error: any) {
+    console.error(
+      'Erro ao criar pagamento PIX:',
+      error?.response?.data || error
+    )
     return NextResponse.json(
       { error: 'Erro ao criar pagamento PIX' },
       { status: 500 }

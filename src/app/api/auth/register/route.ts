@@ -1,25 +1,15 @@
+// src/app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { registerSchema } from '@/lib/validations'
-import { registerWithPaymentSchema } from '@/lib/abacatepay'
+import { registerWithPaymentSchema } from '@/lib/asaas'
 import { getPlanLimits } from '@/constants/plans'
 
-// POST /api/auth/register - Registrar um novo usuário
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-
     const paymentId = body.paymentId
-
-    if (!paymentId) {
-      console.log('SEM ID DE PAGAMENTO')
-      return NextResponse.json(
-        { error: 'ID de pagamento é obrigatório' },
-        { status: 400 }
-      )
-    }
-
     const hasPaymentData = !!paymentId
 
     console.log('Dados recebidos:', {
@@ -42,13 +32,6 @@ export async function POST(req: NextRequest) {
 
     const { name, email, password } = validationResult.data
 
-    console.log('Registrando usuário com dados:', {
-      name,
-      email,
-      paymentId,
-      hasPaymentData
-    })
-
     // Verificar se o e-mail já está em uso
     const existingUser = await prisma.user.findUnique({
       where: { email }
@@ -61,9 +44,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Se há pagamento, verificar se é válido e pertence ao email
+    // Se há pagamento, verificar se é válido
     let paymentData = null
     let planType = 'free'
+
     if (paymentId) {
       paymentData = await prisma.payment.findUnique({
         where: { paymentId }
@@ -74,7 +58,7 @@ export async function POST(req: NextRequest) {
       if (!paymentData) {
         return NextResponse.json(
           { error: 'Pagamento não encontrado' },
-          { status: 400 }
+          { status: 404 }
         )
       }
 
@@ -85,89 +69,58 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      if (paymentData.customerEmail !== email) {
-        return NextResponse.json(
-          { error: 'Email não corresponde ao pagamento' },
-          { status: 400 }
-        )
-      }
-
-      if (paymentData.userId) {
-        return NextResponse.json(
-          { error: 'Este pagamento já foi utilizado para criar uma conta' },
-          { status: 400 }
-        )
-      }
-
       planType = paymentData.planType
     }
 
     // Obter limites do plano
     const planLimits = getPlanLimits(planType)
 
-    // Criptografar a senha
+    // Hash da senha
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Calcular data de expiração do plano (se aplicável)
+    // Calcular expiração do plano (30 dias para planos pagos)
     let planExpiresAt = null
-    // Todos os planos são pagamento único, não expiram
+    if (planType !== 'free' && paymentData) {
+      planExpiresAt = new Date()
+      planExpiresAt.setDate(planExpiresAt.getDate() + 30)
+    }
 
-    // Usar transação para garantir consistência
-    const result = await prisma.$transaction(async tx => {
-      // Criar o usuário
-      const newUser = await tx.user.create({
-        data: {
-          name,
-          email,
-          password: hashedPassword,
-          planType,
-          planExpiresAt,
-          maxCollections: planLimits.maxCollections,
-          maxCupoms: planLimits.maxCupons
-        }
-      })
-
-      console.log('Usuário criado com ID:', newUser.id)
-
-      // Se há pagamento válido, vincular ao usuário
-      if (paymentData) {
-        const updatedPayment = await tx.payment.update({
-          where: { paymentId },
-          data: { userId: newUser.id }
-        })
-
-        console.log('Pagamento vinculado ao usuário:', {
-          paymentId,
-          userId: newUser.id,
-          updatedPayment: updatedPayment
-        })
+    // Criar o usuário
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        planType,
+        maxCollections: planLimits.maxCollections,
+        maxCupoms: planLimits.maxCupons,
+        planExpiresAt
       }
-
-      return newUser
     })
 
-    // Remover a senha do objeto de resposta
-    const { password: _, ...userWithoutPassword } = result
+    // Vincular pagamento ao usuário se houver
+    if (paymentId && paymentData) {
+      await prisma.payment.update({
+        where: { paymentId },
+        data: { userId: newUser.id }
+      })
+    }
 
-    console.log('Registro concluído com sucesso:', {
-      userId: result.id,
-      email: result.email,
-      planType: result.planType,
-      maxCollections: result.maxCollections,
-      maxCupoms: result.maxCupoms,
-      paymentLinked: !!paymentData
+    console.log('Usuário criado com sucesso:', {
+      userId: newUser.id,
+      planType,
+      hasPayment: !!paymentId
     })
 
-    return NextResponse.json(
-      {
-        user: userWithoutPassword,
-        message: paymentData
-          ? `Conta ${planType} criada com sucesso!`
-          : 'Usuário criado com sucesso!',
-        planActivated: !!paymentData
-      },
-      { status: 201 }
-    )
+    return NextResponse.json({
+      message: 'Usuário registrado com sucesso',
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        planType: newUser.planType
+      }
+    })
   } catch (error) {
     console.error('Erro ao registrar usuário:', error)
     return NextResponse.json(

@@ -1,52 +1,38 @@
+// src/app/api/payments/webhook/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+// Webhook do Asaas
+// Docs: eventos payment.* enviam { event: "PAYMENT_RECEIVED", payment: { id, status, value, ... } }
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const url = new URL(req.url)
-    const webhookSecret = url.searchParams.get('secret')
+    const webhookToken = url.searchParams.get('token')
 
-    console.log('Webhook AbacatePay recebido:', body)
-    console.log('Webhook secret:', webhookSecret)
+    console.log('Webhook Asaas recebido:', JSON.stringify(body, null, 2))
 
-    // Validar webhook secret se fornecido
-
-    // Extrair informações do webhook baseado no formato real do AbacatePay
-    let paymentId: string
-    let event: string
-    let status: string
-
-    // Formato real do AbacatePay - billing.paid
-    if (body.event === 'billing.paid' && body.data?.pixQrCode) {
-      paymentId = body.data.pixQrCode.id
-      event = body.event
-      status = body.data.pixQrCode.status || 'PAID'
+    // Validar token do webhook (opcional)
+    const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN
+    if (expectedToken && webhookToken !== expectedToken) {
+      console.error('Token de webhook inválido')
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    // Formato alternativo - evento direto do PIX QRCode
-    else if (body.event && body.data?.id) {
-      paymentId = body.data.id
-      event = body.event
-      status = body.data.status || 'PAID'
-    }
-    // Formato simples - dados diretos
-    else if (body.id && body.status) {
-      paymentId = body.id
-      event = `payment.${body.status.toLowerCase()}`
-      status = body.status
-    }
-    // Formato para PIX QRCode direto
-    else if (body.pixId || body.pixQrCodeId) {
-      paymentId = body.pixId || body.pixQrCodeId
-      event = 'pix.paid'
-      status = body.status || 'PAID'
-    } else {
-      console.error('Formato de webhook não reconhecido:', body)
+
+    // Formato do webhook Asaas:
+    // { event: "PAYMENT_RECEIVED", payment: { id: "pay_xxx", status: "RECEIVED", ... } }
+    const event = body.event
+    const paymentData = body.payment
+
+    if (!event || !paymentData?.id) {
+      console.error('Formato de webhook inválido:', body)
       return NextResponse.json(
         { error: 'Formato de webhook inválido' },
         { status: 400 }
       )
     }
+
+    const paymentId = paymentData.id
 
     console.log(
       'Dados extraídos - ID:',
@@ -54,14 +40,12 @@ export async function POST(req: NextRequest) {
       'Event:',
       event,
       'Status:',
-      status
+      paymentData.status
     )
 
     // Buscar o pagamento no banco de dados
     const payment = await prisma.payment.findUnique({
-      where: {
-        paymentId: paymentId
-      }
+      where: { paymentId }
     })
 
     if (!payment) {
@@ -72,43 +56,49 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Mapear status do AbacatePay para nosso sistema
+    // Mapear eventos do Asaas para nosso sistema
+    // Status possíveis no Asaas: PENDING, RECEIVED, CONFIRMED, OVERDUE, REFUNDED,
+    // RECEIVED_IN_CASH, REFUND_REQUESTED, REFUND_IN_PROGRESS, CHARGEBACK_REQUESTED,
+    // CHARGEBACK_DISPUTE, AWAITING_CHARGEBACK_REVERSAL, DUNNING_REQUESTED,
+    // DUNNING_RECEIVED, AWAITING_RISK_ANALYSIS
     let mappedStatus = 'pending'
-    const upperStatus = status.toUpperCase()
 
-    if (
-      upperStatus === 'PAID' ||
-      upperStatus === 'APPROVED' ||
-      upperStatus === 'COMPLETED'
-    ) {
-      mappedStatus = 'paid'
-    } else if (upperStatus === 'EXPIRED' || upperStatus === 'TIMEOUT') {
-      mappedStatus = 'expired'
-    } else if (upperStatus === 'CANCELED' || upperStatus === 'CANCELLED') {
-      mappedStatus = 'canceled'
-    } else if (upperStatus === 'PENDING') {
-      mappedStatus = 'pending'
+    switch (event) {
+      case 'PAYMENT_CONFIRMED':
+      case 'PAYMENT_RECEIVED':
+        mappedStatus = 'paid'
+        break
+      case 'PAYMENT_OVERDUE':
+        mappedStatus = 'expired'
+        break
+      case 'PAYMENT_DELETED':
+      case 'PAYMENT_REFUNDED':
+      case 'PAYMENT_CHARGEBACK_REQUESTED':
+        mappedStatus = 'canceled'
+        break
+      case 'PAYMENT_CREATED':
+      case 'PAYMENT_UPDATED':
+      case 'PAYMENT_AWAITING_RISK_ANALYSIS':
+        mappedStatus = 'pending'
+        break
+      default:
+        console.log('Evento não mapeado:', event)
+        return NextResponse.json({ message: 'Evento ignorado', event })
     }
 
     if (payment.status === mappedStatus) {
-      // Status já foi processado
       console.log('Webhook já processado para pagamento:', paymentId)
       return NextResponse.json({ message: 'Webhook já processado' })
     }
 
     // Atualizar status do pagamento
-    const updateData: any = {
-      status: mappedStatus
-    }
-
+    const updateData: any = { status: mappedStatus }
     if (mappedStatus === 'paid') {
       updateData.paidAt = new Date()
     }
 
     await prisma.payment.update({
-      where: {
-        paymentId: paymentId
-      },
+      where: { paymentId },
       data: updateData
     })
 
@@ -128,7 +118,7 @@ export async function POST(req: NextRequest) {
       event
     })
   } catch (error) {
-    console.error('Erro no webhook AbacatePay:', error)
+    console.error('Erro no webhook Asaas:', error)
     return NextResponse.json(
       { error: 'Erro ao processar webhook' },
       { status: 500 }
