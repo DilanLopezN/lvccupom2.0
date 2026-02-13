@@ -1,6 +1,10 @@
-// src/lib/asaas.ts
+import 'server-only'
 import axios from 'axios'
 import { z } from 'zod'
+
+/* ================================
+   TIPOS
+================================ */
 
 export interface AsaasConfig {
   apiKey: string
@@ -8,16 +12,34 @@ export interface AsaasConfig {
 }
 
 export interface CreatePixPaymentRequest {
-  amount: number // valor em centavos (será convertido para reais na chamada)
+  amount: number // valor em centavos (convertido para reais)
   description: string
   expiresInSeconds?: number
   customer: {
     name: string
     email: string
-    cpfCnpj: string // OBRIGATÓRIO no Asaas para criar customer
+    cpfCnpj: string
     mobilePhone?: string
   }
 }
+
+export interface PendingPayment {
+  id: string
+  userId?: string
+  paymentId: string
+  customerEmail: string
+  customerName: string
+  amount: number
+  status: 'pending' | 'paid' | 'expired' | 'canceled'
+  planType: 'premium'
+  expiresAt: Date
+  createdAt: Date
+  updatedAt: Date
+}
+
+/* ================================
+   CLIENT
+================================ */
 
 export class AsaasClient {
   private config: AsaasConfig
@@ -27,20 +49,20 @@ export class AsaasClient {
   }
 
   private get headers() {
-    console.log(
-      'ASAAS_API_KEY presente:',
-      !!this.config.apiKey,
-      'length:',
-      this.config.apiKey.length
-    )
+    if (!this.config.apiKey) {
+      throw new Error('ASAAS_API_KEY não configurada')
+    }
+
     return {
       'Content-Type': 'application/json',
       access_token: this.config.apiKey
     }
   }
 
-  // Buscar ou criar customer no Asaas
-  // cpfCnpj é OBRIGATÓRIO para criar customer
+  /* ================================
+     CUSTOMER
+  ================================= */
+
   async findOrCreateCustomer(data: {
     name: string
     email: string
@@ -48,7 +70,6 @@ export class AsaasClient {
     mobilePhone?: string
   }): Promise<{ id: string }> {
     try {
-      // Tentar buscar por cpfCnpj
       const searchResponse = await axios.get(
         `${this.config.baseUrl}/customers`,
         {
@@ -61,7 +82,6 @@ export class AsaasClient {
         return searchResponse.data.data[0]
       }
 
-      // Criar novo customer - name e cpfCnpj são obrigatórios
       const createResponse = await axios.post(
         `${this.config.baseUrl}/customers`,
         {
@@ -84,31 +104,26 @@ export class AsaasClient {
     }
   }
 
-  // Criar cobrança PIX
+  /* ================================
+     CRIAR PIX
+  ================================= */
+
   async createPixPayment(data: CreatePixPaymentRequest): Promise<{
     paymentId: string
-    qrCode: string // copia e cola (payload)
-    qrCodeBase64: string // imagem base64 (encodedImage)
+    qrCode: string
+    qrCodeBase64: string
     expiresAt: string
     value: number
     status: string
     invoiceUrl: string
   }> {
     try {
-      // 1. Buscar/criar customer
-      const customer = await this.findOrCreateCustomer({
-        name: data.customer.name,
-        email: data.customer.email,
-        cpfCnpj: data.customer.cpfCnpj,
-        mobilePhone: data.customer.mobilePhone
-      })
+      const customer = await this.findOrCreateCustomer(data.customer)
 
-      // 2. Calcular dueDate (YYYY-MM-DD)
       const dueDate = new Date()
       dueDate.setSeconds(dueDate.getSeconds() + (data.expiresInSeconds || 3600))
       const dueDateStr = dueDate.toISOString().split('T')[0]
 
-      // 3. Criar cobrança - value no Asaas é em REAIS (não centavos)
       const valueInReais = data.amount / 100
 
       const paymentResponse = await axios.post(
@@ -127,13 +142,12 @@ export class AsaasClient {
       const payment = paymentResponse.data
       const paymentId = payment.id
 
-      // 4. Buscar QR Code PIX (endpoint separado)
       const pixData = await this.getPixQrCode(paymentId)
 
       return {
         paymentId,
-        qrCode: pixData.payload, // código copia e cola
-        qrCodeBase64: pixData.encodedImage, // imagem base64 do QR
+        qrCode: pixData.payload,
+        qrCodeBase64: pixData.encodedImage,
         expiresAt: pixData.expirationDate || dueDate.toISOString(),
         value: payment.value,
         status: payment.status,
@@ -148,7 +162,10 @@ export class AsaasClient {
     }
   }
 
-  // Buscar status de um pagamento
+  /* ================================
+     STATUS PAGAMENTO
+  ================================= */
+
   async getPayment(paymentId: string) {
     try {
       const response = await axios.get(
@@ -165,7 +182,10 @@ export class AsaasClient {
     }
   }
 
-  // Buscar QR Code PIX de um pagamento
+  /* ================================
+     QR CODE PIX
+  ================================= */
+
   async getPixQrCode(paymentId: string): Promise<{
     encodedImage: string
     payload: string
@@ -187,13 +207,29 @@ export class AsaasClient {
   }
 }
 
-// Instância única do client
-export const asaasClient = new AsaasClient({
-  apiKey: process.env.ASAAS_API_KEY || '',
-  baseUrl: process.env.ASAAS_BASE_URL || ''
-})
+/* ================================
+   FACTORY SEGURA (SEM INSTÂNCIA GLOBAL)
+================================ */
 
-// Schema de validação para registro com pagamento
+function getEnvOrThrow(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`Variável de ambiente ${name} não definida`)
+  }
+  return value
+}
+
+export function getAsaasClient(): AsaasClient {
+  return new AsaasClient({
+    apiKey: getEnvOrThrow('ASAAS_API_KEY'),
+    baseUrl: getEnvOrThrow('ASAAS_BASE_URL')
+  })
+}
+
+/* ================================
+   SCHEMA
+================================ */
+
 export const registerWithPaymentSchema = z
   .object({
     name: z.string().min(2, 'O nome deve ter pelo menos 2 caracteres'),
@@ -209,17 +245,3 @@ export const registerWithPaymentSchema = z
     message: 'As senhas não conferem',
     path: ['confirmPassword']
   })
-
-export interface PendingPayment {
-  id: string
-  userId?: string
-  paymentId: string
-  customerEmail: string
-  customerName: string
-  amount: number
-  status: 'pending' | 'paid' | 'expired' | 'canceled'
-  planType: 'premium'
-  expiresAt: Date
-  createdAt: Date
-  updatedAt: Date
-}

@@ -1,23 +1,24 @@
-// src/app/api/payments/create-pix/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { asaasClient } from '@/lib/asaas'
+import { getAsaasClient } from '@/lib/asaas'
 import { plans } from '@/constants/plans'
+
+export const runtime = 'nodejs'
 
 const createPixSchema = z.object({
   customerName: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   customerEmail: z.string().email('Email inválido'),
-  customerDocument: z.string().min(11, 'CPF é obrigatório'), // cpfCnpj obrigatório no Asaas
+  customerDocument: z.string().min(11, 'CPF é obrigatório'),
   customerPhone: z.string().optional(),
   planType: z.enum(['base', 'premium', 'vip']).default('base')
 })
 
-// Preços dos planos em centavos
+// Preços em centavos
 const PLAN_PRICES = {
-  base: 799, // R$ 7,99
-  premium: 1499, // R$ 14,99
-  vip: 2499 // R$ 24,99
+  base: 799,
+  premium: 1499,
+  vip: 2499
 }
 
 export async function POST(req: NextRequest) {
@@ -41,7 +42,12 @@ export async function POST(req: NextRequest) {
       planType
     } = validationResult.data
 
-    // Verificar se já existe um pagamento pendente para este email e plano
+    const asaas = getAsaasClient()
+
+    // Remove máscara do CPF (caso venha formatado)
+    const cleanDocument = customerDocument.replace(/\D/g, '')
+
+    // 🔎 Verificar pagamento pendente
     const existingPayment = await prisma.payment.findFirst({
       where: {
         customerEmail,
@@ -53,18 +59,10 @@ export async function POST(req: NextRequest) {
 
     if (existingPayment) {
       try {
-        // Verificar se ainda está pendente no Asaas
-        const asaasPayment = await asaasClient.getPayment(
-          existingPayment.paymentId
-        )
+        const asaasPayment = await asaas.getPayment(existingPayment.paymentId)
 
         if (asaasPayment.status === 'PENDING') {
-          // Rebuscar o QR Code
-          const pixData = await asaasClient.getPixQrCode(
-            existingPayment.paymentId
-          )
-
-          console.log('pix data', pixData)
+          const pixData = await asaas.getPixQrCode(existingPayment.paymentId)
 
           return NextResponse.json({
             paymentId: existingPayment.paymentId,
@@ -77,13 +75,14 @@ export async function POST(req: NextRequest) {
             planType: existingPayment.planType
           })
         }
-      } catch (err) {
-        console.log('Pagamento existente expirado ou erro, criando novo...')
+      } catch {
+        console.log('Pagamento existente inválido. Criando novo...')
       }
     }
 
-    // Obter dados do plano
+    // 📦 Plano
     const selectedPlan = plans.find(p => p.planType === planType)
+
     if (!selectedPlan) {
       return NextResponse.json(
         { error: 'Plano não encontrado' },
@@ -93,20 +92,20 @@ export async function POST(req: NextRequest) {
 
     const amount = PLAN_PRICES[planType]
 
-    // Criar novo pagamento no Asaas
-    const pixPayment = await asaasClient.createPixPayment({
+    // 💳 Criar PIX no Asaas
+    const pixPayment = await asaas.createPixPayment({
       amount,
-      expiresInSeconds: 3600, // 1 hora
+      expiresInSeconds: 3600,
       description: `Plano ${selectedPlan.name} - Cupons de Amor`,
       customer: {
         name: customerName,
         email: customerEmail,
-        cpfCnpj: customerDocument, // obrigatório no Asaas
+        cpfCnpj: cleanDocument,
         mobilePhone: customerPhone
       }
     })
 
-    // Salvar no banco de dados
+    // 💾 Salvar no banco
     const payment = await prisma.payment.create({
       data: {
         paymentId: pixPayment.paymentId,
@@ -122,7 +121,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       paymentId: payment.paymentId,
       qrCode: pixPayment.qrCode,
-      qrCodeBase64: pixPayment.qrCodeBase64,
+      qrCodeBase64: `data:image/png;base64,${pixPayment.qrCodeBase64}`,
       copyPaste: pixPayment.qrCode,
       amount: payment.amount,
       expiresAt: payment.expiresAt,
@@ -136,6 +135,7 @@ export async function POST(req: NextRequest) {
       'Erro ao criar pagamento PIX:',
       error?.response?.data || error
     )
+
     return NextResponse.json(
       { error: 'Erro ao criar pagamento PIX' },
       { status: 500 }
