@@ -2,7 +2,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { useSession } from 'next-auth/react'
+import { useSession, signIn } from 'next-auth/react'
 import { Header } from '@/app/components/Header'
 import { CouponModal } from '@/app/components/CupomModal'
 import { CouponGrid } from '@/app/components/CupomGrid'
@@ -252,7 +252,6 @@ export default function SharedCollection() {
 
       setFulfillMessage(data.message)
 
-      // Atualizar o cupom na lista
       if (collection) {
         const updatedCoupons = collection.coupons.map(c =>
           c.id === selectedCoupon.id
@@ -274,7 +273,7 @@ export default function SharedCollection() {
     }
   }
 
-  // Registrar como parceiro(a)
+  // Registrar como parceiro(a) + login automático
   const handlePartnerRegister = async () => {
     setPartnerLoading(true)
     setPartnerMessage(null)
@@ -295,12 +294,25 @@ export default function SharedCollection() {
         throw new Error(data.error || 'Erro ao criar conta')
       }
 
-      setPartnerMessage(
-        data.alreadyExists
-          ? 'Conta vinculada com sucesso! Faça login para confirmar cupons cumpridos.'
-          : 'Conta criada com sucesso! Faça login para confirmar cupons cumpridos.'
-      )
+      // Login automático após criar conta
+      const loginResult = await signIn('credentials', {
+        redirect: false,
+        email: partnerForm.email,
+        password: partnerForm.password
+      })
+
+      if (loginResult?.error) {
+        setPartnerMessage(
+          'Conta criada! Faça login manualmente para confirmar cupons.'
+        )
+        setShowPartnerForm(false)
+        return
+      }
+
+      setPartnerMessage('Conta criada e logado com sucesso!')
       setShowPartnerForm(false)
+      // Recarregar para atualizar a session
+      window.location.reload()
     } catch (error: any) {
       setPartnerMessage(`Erro: ${error.message}`)
     } finally {
@@ -512,14 +524,20 @@ export default function SharedCollection() {
               <button
                 onClick={handleFulfill}
                 disabled={fulfillLoading}
-                className="w-full bg-green-500 text-white py-2 rounded-md font-medium hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center"
+                className="bg-green-500 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-600 transition-colors disabled:opacity-70 flex items-center"
               >
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                {fulfillLoading ? 'Confirmando...' : 'Confirmar Cumprido'}
+                {fulfillLoading ? (
+                  'Confirmando...'
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Confirmar Cumprimento
+                  </>
+                )}
               </button>
               {fulfillMessage && (
                 <p
-                  className={`text-sm mt-2 text-center ${fulfillMessage.startsWith('Erro') ? 'text-red-600' : 'text-green-600'}`}
+                  className={`text-sm mt-2 ${fulfillMessage.startsWith('Erro') ? 'text-red-600' : 'text-green-600'}`}
                 >
                   {fulfillMessage}
                 </p>
@@ -527,10 +545,13 @@ export default function SharedCollection() {
             </div>
           ) : selectedCoupon?.fulfillment?.fulfilled ? (
             <div className="mt-4 border-t pt-4">
-              <div className="bg-green-50 text-green-700 p-3 rounded-md text-center flex items-center justify-center">
-                <Coins className="h-4 w-4 mr-1" />
-                <Flame className="h-4 w-4 mr-2" />
-                Cupom cumprido! +1 Lover Coin e +1 Lover Strike
+              <div className="flex items-center text-green-600">
+                <CheckCircle2 className="h-5 w-5 mr-2" />
+                <span className="text-sm font-medium">
+                  Cupom cumprido!{' '}
+                  {selectedCoupon.fulfillment.fulfilledAt &&
+                    `em ${formatDateBR(selectedCoupon.fulfillment.fulfilledAt)}`}
+                </span>
               </div>
             </div>
           ) : null

@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/constants/constants'
-import { getUserUsageStats } from '@/lib/planLimits'
+import { getUserUsageStats } from '@/constants/plansLimit'
 
 export async function GET() {
   try {

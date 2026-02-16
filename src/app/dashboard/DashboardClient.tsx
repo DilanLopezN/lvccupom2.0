@@ -1,3 +1,4 @@
+// src/app/dashboard/DashboardClient.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -8,10 +9,13 @@ import {
   Gift,
   Calendar,
   AlertCircle,
-  Crown
+  Crown,
+  Coins,
+  Flame
 } from 'lucide-react'
 import { formatDateBR } from '@/lib/utils'
 import { plans } from '@/constants/plans'
+import { PricingModal } from '@/app/components/PricingModal'
 
 type Collection = {
   id: string
@@ -26,15 +30,16 @@ type Collection = {
 
 type UserStats = {
   planType: string
+  tokens: number
+  loverCoins: number
+  loverStrikes: number
   collections: {
     current: number
     max: number
     percentage: number
   }
   coupons: {
-    current: number
-    max: number
-    percentage: number
+    total: number
   }
 }
 
@@ -47,36 +52,36 @@ export default function DashboardClient({ session }: Props) {
   const [userStats, setUserStats] = useState<UserStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [showPricingModal, setShowPricingModal] = useState(false)
+
+  const fetchData = async () => {
+    try {
+      const collectionsResponse = await fetch('/api/collections')
+
+      if (!collectionsResponse.ok) {
+        throw new Error('Falha ao buscar coleções')
+      }
+
+      const collectionsData = await collectionsResponse.json()
+      setCollections(collectionsData)
+
+      const statsResponse = await fetch('/api/user/stats')
+
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json()
+        setUserStats(statsData)
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dados:', err)
+      setError(
+        'Não foi possível carregar suas coleções. Tente novamente mais tarde.'
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const collectionsResponse = await fetch('/api/collections')
-
-        if (!collectionsResponse.ok) {
-          throw new Error('Falha ao buscar coleções')
-        }
-
-        const collectionsData = await collectionsResponse.json()
-        setCollections(collectionsData)
-
-        const statsResponse = await fetch('/api/user/stats')
-
-        if (statsResponse.ok) {
-          const statsData = await statsResponse.json()
-          setUserStats(statsData)
-        }
-      } catch (err) {
-        console.error('Erro ao buscar dados:', err)
-        setError(
-          'Não foi possível carregar suas coleções. Tente novamente mais tarde.'
-        )
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchData()
   }, [])
 
@@ -84,7 +89,7 @@ export default function DashboardClient({ session }: Props) {
     if (!userStats) return
 
     if (userStats.collections.current >= userStats.collections.max) {
-      setShowUpgradeModal(true)
+      setShowPricingModal(true)
       return
     }
 
@@ -109,6 +114,11 @@ export default function DashboardClient({ session }: Props) {
     if (percentage >= 90) return 'bg-red-500'
     if (percentage >= 70) return 'bg-yellow-500'
     return 'bg-green-500'
+  }
+
+  const handlePaymentSuccess = () => {
+    setLoading(true)
+    fetchData()
   }
 
   return (
@@ -136,74 +146,87 @@ export default function DashboardClient({ session }: Props) {
             </div>
 
             <button
-              onClick={() => setShowUpgradeModal(true)}
+              onClick={() => setShowPricingModal(true)}
               className="text-pink-600 hover:text-pink-700 text-sm font-medium"
             >
-              Fazer Upgrade
+              Comprar Tokens
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Coleções */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-700">
-                  Coleções
-                </span>
-                <span className="text-sm text-gray-500">
-                  {userStats.collections.current} / {userStats.collections.max}
-                </span>
-              </div>
-
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${getProgressColor(
-                    userStats.collections.percentage
-                  )}`}
-                  style={{
-                    width: `${Math.min(userStats.collections.percentage, 100)}%`
-                  }}
-                />
-              </div>
-
-              {userStats.collections.percentage >= 80 && (
-                <p className="text-xs text-orange-600 mt-1 flex items-center">
-                  <AlertCircle className="h-3 w-3 mr-1" />
-                  Você está próximo do limite
-                </p>
-              )}
+          {/* Tokens, Coins e Strikes */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-pink-50 rounded-lg p-4 text-center">
+              <Gift className="h-6 w-6 text-pink-500 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-pink-600">
+                {userStats.tokens}
+              </p>
+              <p className="text-xs text-gray-600">Tokens</p>
             </div>
-
-            {/* Cupons */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-700">
-                  Cupons
-                </span>
-                <span className="text-sm text-gray-500">
-                  {userStats.coupons.current} / {userStats.coupons.max}
-                </span>
-              </div>
-
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${getProgressColor(
-                    userStats.coupons.percentage
-                  )}`}
-                  style={{
-                    width: `${Math.min(userStats.coupons.percentage, 100)}%`
-                  }}
-                />
-              </div>
-
-              {userStats.coupons.percentage >= 80 && (
-                <p className="text-xs text-orange-600 mt-1 flex items-center">
-                  <AlertCircle className="h-3 w-3 mr-1" />
-                  Você está próximo do limite
-                </p>
-              )}
+            <div className="bg-yellow-50 rounded-lg p-4 text-center">
+              <Coins className="h-6 w-6 text-yellow-500 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-yellow-600">
+                {userStats.loverCoins}
+              </p>
+              <p className="text-xs text-gray-600">Lover Coins</p>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-4 text-center">
+              <Flame className="h-6 w-6 text-orange-500 mx-auto mb-1" />
+              <p className="text-2xl font-bold text-orange-600">
+                {userStats.loverStrikes}
+              </p>
+              <p className="text-xs text-gray-600">Lover Strikes</p>
             </div>
           </div>
+
+          {/* Barra de Coleções */}
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                Coleções
+              </span>
+              <span className="text-sm text-gray-500">
+                {userStats.collections.current} / {userStats.collections.max}
+              </span>
+            </div>
+
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full ${getProgressColor(
+                  userStats.collections.percentage
+                )}`}
+                style={{
+                  width: `${Math.min(userStats.collections.percentage, 100)}%`
+                }}
+              />
+            </div>
+
+            {userStats.collections.percentage >= 80 && (
+              <p className="text-xs text-orange-600 mt-1 flex items-center">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Você está próximo do limite
+              </p>
+            )}
+          </div>
+
+          {/* Alerta de tokens baixos */}
+          {userStats.tokens === 0 && (
+            <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <AlertCircle className="h-4 w-4 text-red-500 mr-2" />
+                  <span className="text-sm text-red-700">
+                    Você não tem tokens! Compre mais para criar cupons.
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowPricingModal(true)}
+                  className="text-sm bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600 transition-colors"
+                >
+                  Comprar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -257,6 +280,13 @@ export default function DashboardClient({ session }: Props) {
           ))}
         </div>
       )}
+
+      {/* Modal de Planos / Compra de Tokens */}
+      <PricingModal
+        isOpen={showPricingModal}
+        onClose={() => setShowPricingModal(false)}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
     </div>
   )
 }

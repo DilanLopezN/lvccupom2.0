@@ -8,8 +8,7 @@ import { createCouponSchema } from '@/lib/validations'
 import { parseDate } from '@/lib/utils'
 
 import { authOptions } from '@/constants/constants'
-import { canCreateCoupon } from '@/lib/planLimits'
-import { consumeToken } from '@/constants/plansLimit'
+import { canCreateCoupon, consumeToken } from '@/constants/plansLimit'
 
 // GET /api/collections/[collectionId]/coupons
 export async function GET(req: NextRequest) {
