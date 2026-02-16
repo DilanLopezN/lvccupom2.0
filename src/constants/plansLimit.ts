@@ -117,6 +117,9 @@ export async function getUserUsageStats(userId: string) {
             select: { coupons: true }
           }
         }
+      },
+      partner: {
+        select: { name: true, profileImage: true }
       }
     }
   })
@@ -135,6 +138,13 @@ export async function getUserUsageStats(userId: string) {
     tokens: user.tokens,
     loverCoins: user.loverCoins,
     loverStrikes: user.loverStrikes,
+    profileImage: user.profileImage,
+    partner: user.partner
+      ? {
+          name: user.partner.name,
+          profileImage: user.partner.profileImage
+        }
+      : null,
     collections: {
       current: user.collections.length,
       max: user.maxCollections || planLimits.maxCollections,

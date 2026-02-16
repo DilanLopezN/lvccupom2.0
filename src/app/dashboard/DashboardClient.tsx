@@ -16,6 +16,7 @@ import {
 import { formatDateBR } from '@/lib/utils'
 import { plans } from '@/constants/plans'
 import { PricingModal } from '@/app/components/PricingModal'
+import SplitHeart from '@/app/components/SplitHeart'
 
 type Collection = {
   id: string
@@ -53,6 +54,11 @@ export default function DashboardClient({ session }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showPricingModal, setShowPricingModal] = useState(false)
+  const [profileImage, setProfileImage] = useState<string | null>(null)
+  const [partnerInfo, setPartnerInfo] = useState<{
+    name: string
+    profileImage: string | null
+  } | null>(null)
 
   const fetchData = async () => {
     try {
@@ -70,6 +76,8 @@ export default function DashboardClient({ session }: Props) {
       if (statsResponse.ok) {
         const statsData = await statsResponse.json()
         setUserStats(statsData)
+        setProfileImage(statsData.profileImage || null)
+        setPartnerInfo(statsData.partner || null)
       }
     } catch (err) {
       console.error('Erro ao buscar dados:', err)
@@ -94,6 +102,18 @@ export default function DashboardClient({ session }: Props) {
     }
 
     window.location.href = '/dashboard/collections/new'
+  }
+
+  const handlePhotoUpload = async (file: File) => {
+    const fd = new FormData()
+    fd.append('photo', file)
+    try {
+      const res = await fetch('/api/user/photo', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.imageUrl) setProfileImage(data.imageUrl)
+    } catch (err) {
+      console.error('Erro ao enviar foto:', err)
+    }
   }
 
   const getRandomIcon = () => {
@@ -134,6 +154,14 @@ export default function DashboardClient({ session }: Props) {
           Nova Coleção
         </button>
       </div>
+
+      <SplitHeart
+        ownerName={session?.user?.name || 'Você'}
+        ownerPhoto={profileImage}
+        partnerName={partnerInfo?.name || null}
+        partnerPhoto={partnerInfo?.profileImage || null}
+        onPhotoUpload={handlePhotoUpload}
+      />
 
       {userStats && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
