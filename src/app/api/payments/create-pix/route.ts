@@ -133,14 +133,39 @@ export async function POST(req: NextRequest) {
       invoiceUrl: pixPayment.invoiceUrl
     })
   } catch (error: any) {
-    console.error(
-      'Erro ao criar pagamento PIX:',
-      error?.response?.data || error
-    )
+    const asaasError = error?.response?.data
+    const statusCode = error?.response?.status || 500
+
+    console.error('=== ERRO CREATE-PIX ===')
+    console.error('Status HTTP:', statusCode)
+    console.error('Asaas Response:', JSON.stringify(asaasError, null, 2))
+    console.error('Error Message:', error?.message)
+    console.error('Stack:', error?.stack)
+    console.error('=== FIM ERRO ===')
+
+    // Mensagem amigável baseada no erro
+    let userMessage = 'Erro ao criar pagamento PIX'
+
+    if (statusCode === 401) {
+      userMessage = 'Erro de autenticação com gateway de pagamento'
+    } else if (statusCode === 400) {
+      const errors = asaasError?.errors
+      if (errors?.length) {
+        userMessage = errors.map((e: any) => e.description).join(', ')
+      }
+    } else if (statusCode === 403) {
+      userMessage = 'Acesso negado ao gateway de pagamento'
+    } else if (error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND') {
+      userMessage = 'Não foi possível conectar ao gateway de pagamento'
+    }
 
     return NextResponse.json(
-      { error: 'Erro ao criar pagamento PIX' },
-      { status: 500 }
+      {
+        error: userMessage,
+        details: process.env.NODE_ENV !== 'production' ? asaasError : undefined,
+        code: statusCode
+      },
+      { status: statusCode >= 400 && statusCode < 600 ? statusCode : 500 }
     )
   }
 }

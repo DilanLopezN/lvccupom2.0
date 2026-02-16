@@ -1,3 +1,4 @@
+// src/app/components/CupomModal.tsx
 import { Clock, X, Calendar } from 'lucide-react'
 import { getIcon } from './GetIcon'
 
@@ -6,13 +7,14 @@ export const CouponModal = ({
   coupon,
   onClose,
   onRedeem,
-  message
+  message,
+  extraContent
 }: any) => {
   if (!isVisible || !coupon) return null
 
   const getButtonContent = () => {
     if (message) {
-      return null // Não mostrar botão se há mensagem
+      return null
     }
 
     if (coupon.used) {
@@ -45,7 +47,6 @@ export const CouponModal = ({
       )
     }
 
-    // Cupom disponível para resgate
     return (
       <button
         onClick={onRedeem}
@@ -68,26 +69,22 @@ export const CouponModal = ({
         <div className="p-6">
           <div className="flex justify-center mb-4">
             <div className="bg-pink-100 p-4 rounded-full">
-              {getIcon(coupon.icon)}
+              {getIcon(coupon.icon, 'h-8 w-8 text-pink-500')}
             </div>
           </div>
-          <p className="text-center mb-4">{coupon.description}</p>
-          <div className="flex justify-center mb-4">
-            <span className="py-1 px-3 bg-pink-100 text-pink-800 rounded-full text-sm">
-              {coupon.category}
-            </span>
-          </div>
 
-          <div className="text-center text-sm text-gray-500 mb-6 space-y-1">
+          <p className="text-gray-700 text-center mb-4">{coupon.description}</p>
+
+          <div className="flex justify-center space-x-4 mb-4 text-sm text-gray-500">
             {coupon.validStart && (
-              <div className="flex items-center justify-center">
-                <Calendar size={14} className="mr-1" /> Válido a partir de:{' '}
-                {coupon.validStart}
+              <div className="flex items-center">
+                <Calendar size={14} className="mr-1" />
+                De: {coupon.validStart}
               </div>
             )}
-            <div className="flex items-center justify-center">
-              <Clock size={14} className="mr-1" /> Válido até:{' '}
-              {coupon.validUntil}
+            <div className="flex items-center">
+              <Clock size={14} className="mr-1" />
+              Até: {coupon.validUntil}
             </div>
           </div>
 
@@ -96,7 +93,7 @@ export const CouponModal = ({
               className={`p-4 rounded-md text-center mb-4 ${
                 message.includes('sucesso')
                   ? 'bg-green-100 text-green-800'
-                  : 'bg-red-100 text-red-800'
+                  : 'bg-yellow-100 text-yellow-800'
               }`}
             >
               {message}
@@ -104,6 +101,9 @@ export const CouponModal = ({
           )}
 
           {getButtonContent()}
+
+          {/* Extra content - usado para fulfillment */}
+          {extraContent}
         </div>
       </div>
     </div>

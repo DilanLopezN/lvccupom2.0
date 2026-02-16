@@ -1,10 +1,9 @@
-import { getServerSession } from 'next-auth/next'
+// src/app/api/user/stats/route.ts
 import { NextResponse } from 'next/server'
-
-import { getUserUsageStats } from '@/lib/planLimits'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/constants/constants'
+import { getUserUsageStats } from '@/lib/planLimits'
 
-// GET /api/user/stats - Obter estatísticas de uso do usuário
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
@@ -24,10 +23,7 @@ export async function GET() {
 
     return NextResponse.json(stats)
   } catch (error) {
-    console.error('Erro ao buscar estatísticas do usuário:', error)
-    return NextResponse.json(
-      { error: 'Erro ao buscar estatísticas' },
-      { status: 500 }
-    )
+    console.error('Erro ao buscar stats:', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

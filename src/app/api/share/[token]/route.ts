@@ -1,11 +1,10 @@
-'use client'
+// src/app/api/share/[token]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 // GET /api/share/[token] - Obter uma coleção compartilhada pelo token
 export async function GET(req: NextRequest) {
   try {
-    // Extrai o token da URL
     const match = req.nextUrl.pathname.match(/\/share\/([^/]+)/)
     const token = match ? match[1] : null
 
@@ -13,16 +12,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 400 })
     }
 
-    // Verificar se a coleção existe pelo token de compartilhamento
     const collection = await prisma.couponCollection.findUnique({
       where: { shareToken: token },
       include: {
         coupons: {
-          orderBy: { createdAt: 'desc' }
+          orderBy: { createdAt: 'desc' },
+          include: {
+            fulfillment: {
+              select: {
+                fulfilled: true,
+                fulfilledAt: true
+              }
+            }
+          }
         },
         user: {
           select: {
-            name: true // Apenas retornar o nome do usuário, não dados sensíveis
+            name: true
           }
         }
       }

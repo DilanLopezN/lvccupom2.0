@@ -1,8 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -18,14 +14,24 @@ model User {
   email          String             @unique
   password       String
   name           String
+  tokens         Int                @default(2)
+  loverCoins     Int                @default(0) @map("lover_coins")
+  loverStrikes   Int                @default(0) @map("lover_strikes")
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime           @default(now()) @map("updated_at") @db.Timestamptz
   maxCollections Int?
-  maxCupoms      Int?
   planType       String?
   planExpiresAt  DateTime?
   collections    CouponCollection[]
   Payment        Payment[]
+
+  // Relacionamento de parceiro
+  partnerId String? @unique @map("partner_id") @db.Uuid
+  partner   User?   @relation("PartnerRelation", fields: [partnerId], references: [id])
+  partnerOf User?   @relation("PartnerRelation")
+
+  // Fulfillments que este usuário confirmou (como parceiro recebedor)
+  fulfillments CouponFulfillment[]
 
   @@map("users")
 }
@@ -33,12 +39,12 @@ model User {
 model Payment {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId        String?   @map("user_id") @db.Uuid
-  paymentId     String    @unique @map("payment_id") // ID do AbacatePay
+  paymentId     String    @unique @map("payment_id")
   customerEmail String    @map("customer_email")
   customerName  String    @map("customer_name")
-  amount        Int // valor em centavos
-  status        String    @default("pending") // 'pending' | 'paid' | 'expired' | 'canceled'
-  planType      String    @map("plan_type") // 'premium'
+  amount        Int
+  status        String    @default("pending")
+  planType      String    @map("plan_type")
   expiresAt     DateTime  @map("expires_at") @db.Timestamptz
   paidAt        DateTime? @map("paid_at") @db.Timestamptz
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
@@ -68,20 +74,35 @@ model CouponCollection {
 }
 
 model Coupon {
-  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  collectionId String           @map("collection_id") @db.Uuid
+  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  collectionId String             @map("collection_id") @db.Uuid
   title        String
   description  String
   icon         String
   category     String
-  isUsed       Boolean          @default(false) @map("is_used")
-  redeemedAt   DateTime?        @map("redeemed_at") @db.Timestamptz
-  validStart   DateTime         @map("valid_start") @db.Timestamptz
-  validUntil   DateTime         @map("valid_until") @db.Timestamptz
-  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime         @default(now()) @map("updated_at") @db.Timestamptz
-  collection   CouponCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  isUsed       Boolean            @default(false) @map("is_used")
+  redeemedAt   DateTime?          @map("redeemed_at") @db.Timestamptz
+  validStart   DateTime           @map("valid_start") @db.Timestamptz
+  validUntil   DateTime           @map("valid_until") @db.Timestamptz
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime           @default(now()) @map("updated_at") @db.Timestamptz
+  collection   CouponCollection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  fulfillment  CouponFulfillment?
 
   @@index([collectionId])
   @@map("coupons")
+}
+
+model CouponFulfillment {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  couponId      String    @unique @map("coupon_id") @db.Uuid
+  confirmedById String    @map("confirmed_by_id") @db.Uuid
+  fulfilled     Boolean   @default(false)
+  fulfilledAt   DateTime? @map("fulfilled_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  coupon      Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  confirmedBy User   @relation(fields: [confirmedById], references: [id])
+
+  @@map("coupon_fulfillments")
 }

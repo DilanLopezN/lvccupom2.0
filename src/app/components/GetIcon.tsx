@@ -1,6 +1,6 @@
 import { Calendar, Gift, Heart } from 'lucide-react'
 
-export const getIcon = (type: any) => {
+export const getIcon = (type: any, p0: string) => {
   switch (type) {
     case 'heart':
       return <Heart className="text-red-500" />

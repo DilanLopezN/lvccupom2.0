@@ -96,10 +96,19 @@ export class AsaasClient {
 
       return createResponse.data
     } catch (error: any) {
+      console.error('=== ERRO CUSTOMER ASAAS ===')
+      console.error('Status:', error?.response?.status)
+      console.error('Data:', JSON.stringify(error?.response?.data, null, 2))
+      console.error('URL:', error?.config?.url)
       console.error(
-        'Erro ao buscar/criar customer Asaas:',
-        error?.response?.data || error
+        'Headers enviados:',
+        JSON.stringify(error?.config?.headers, null, 2)
       )
+      console.error(
+        'Body enviado:',
+        JSON.stringify(error?.config?.data, null, 2)
+      )
+      console.error('=== FIM ===')
       throw error
     }
   }
@@ -154,10 +163,21 @@ export class AsaasClient {
         invoiceUrl: payment.invoiceUrl
       }
     } catch (error: any) {
+      console.error('=== ERRO PIX ASAAS ===')
+      console.error('Status:', error?.response?.status)
+      console.error('Data:', JSON.stringify(error?.response?.data, null, 2))
+      console.error('URL:', error?.config?.url)
+      console.error('Method:', error?.config?.method)
       console.error(
-        'Erro ao criar pagamento PIX Asaas:',
-        error?.response?.data || error
+        'Body enviado:',
+        JSON.stringify(error?.config?.data, null, 2)
       )
+      console.error('Base URL usada:', this.config.baseUrl)
+      console.error(
+        'API Key (primeiros 10 chars):',
+        this.config.apiKey?.substring(0, 10) + '...'
+      )
+      console.error('=== FIM ===')
       throw error
     }
   }
@@ -220,10 +240,18 @@ function getEnvOrThrow(name: string): string {
 }
 
 export function getAsaasClient(): AsaasClient {
-  return new AsaasClient({
-    apiKey: getEnvOrThrow('ASAAS_API_KEY'),
-    baseUrl: getEnvOrThrow('ASAAS_BASE_URL')
-  })
+  const apiKey = getEnvOrThrow('ASAAS_API_KEY')
+  const baseUrl = getEnvOrThrow('ASAAS_BASE_URL')
+
+  console.log('[AsaasClient] Base URL:', baseUrl)
+  console.log(
+    '[AsaasClient] API Key definida:',
+    !!apiKey,
+    '| Tamanho:',
+    apiKey.length
+  )
+
+  return new AsaasClient({ apiKey, baseUrl })
 }
 
 /* ================================
