@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { getAsaasClient } from '@/lib/asaas'
 import { plans } from '@/constants/plans'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/constants/constants'
 
 export const runtime = 'nodejs'
 
@@ -106,6 +108,22 @@ export async function POST(req: NextRequest) {
       }
     })
 
+    const session = await getServerSession(authOptions)
+    let userId: string | null = null
+
+    if (session?.user?.id) {
+      userId = session.user.id
+    } else {
+      // Tentar encontrar usuário pelo email
+      const existingUser = await prisma.user.findUnique({
+        where: { email: customerEmail },
+        select: { id: true }
+      })
+      if (existingUser) {
+        userId = existingUser.id
+      }
+    }
+
     // 💾 Salvar no banco
     const payment = await prisma.payment.create({
       data: {
@@ -115,7 +133,8 @@ export async function POST(req: NextRequest) {
         amount,
         status: 'pending',
         planType,
-        expiresAt: new Date(pixPayment.expiresAt)
+        expiresAt: new Date(pixPayment.expiresAt),
+        userId
       }
     })
 

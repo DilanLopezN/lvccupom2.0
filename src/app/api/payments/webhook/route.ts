@@ -92,25 +92,50 @@ export async function POST(req: NextRequest) {
     })
 
     // Se pagamento confirmado e há usuário vinculado, adicionar tokens
-    if (mappedStatus === 'paid' && payment.userId) {
-      const planLimits = getPlanLimits(payment.planType)
+    if (mappedStatus === 'paid') {
+      let targetUserId = payment.userId
 
-      await prisma.user.update({
-        where: { id: payment.userId },
-        data: {
-          planType: payment.planType,
-          tokens: { increment: planLimits.tokens },
-          maxCollections: planLimits.maxCollections,
-          planExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      // Fallback: buscar usuário pelo email se userId não estiver vinculado
+      if (!targetUserId) {
+        const user = await prisma.user.findUnique({
+          where: { email: payment.customerEmail },
+          select: { id: true }
+        })
+        if (user) {
+          targetUserId = user.id
+          // Vincular o payment ao usuário encontrado
+          await prisma.payment.update({
+            where: { paymentId },
+            data: { userId: user.id }
+          })
         }
-      })
+      }
 
-      console.log('Tokens adicionados ao usuário:', {
-        userId: payment.userId,
-        planType: payment.planType,
-        tokensAdded: planLimits.tokens,
-        maxCollections: planLimits.maxCollections
-      })
+      if (targetUserId) {
+        const planLimits = getPlanLimits(payment.planType)
+
+        await prisma.user.update({
+          where: { id: targetUserId },
+          data: {
+            planType: payment.planType,
+            tokens: { increment: planLimits.tokens },
+            maxCollections: planLimits.maxCollections,
+            planExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+          }
+        })
+
+        console.log('Tokens adicionados ao usuário:', {
+          userId: targetUserId,
+          planType: payment.planType,
+          tokensAdded: planLimits.tokens,
+          maxCollections: planLimits.maxCollections
+        })
+      } else {
+        console.warn('Pagamento confirmado mas nenhum usuário encontrado:', {
+          paymentId,
+          email: payment.customerEmail
+        })
+      }
     }
 
     console.log(

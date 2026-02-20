@@ -46,6 +46,22 @@ export async function POST(req: NextRequest) {
       }
     })
 
+    const { paymentId } = body
+
+    if (paymentId) {
+      await prisma.payment.updateMany({
+        where: {
+          paymentId,
+          userId: null
+        },
+        data: { userId: newUser.id }
+      })
+      console.log('Payment vinculado ao novo usuário:', {
+        paymentId,
+        userId: newUser.id
+      })
+    }
+
     console.log('Usuário criado com sucesso:', {
       userId: newUser.id,
       planType: 'free',
