@@ -55,21 +55,15 @@ export async function canCreateCollection(
 /**
  * Verifica se o usuário pode criar um novo cupom em uma coleção
  */
+/**
+ * Verifica se o usuário tem tokens para criar um cupom
+ */
 export async function canCreateCoupon(
   userId: string,
   collectionId?: string
 ): Promise<PlanLimitCheck> {
   const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      collections: {
-        include: {
-          _count: {
-            select: { coupons: true }
-          }
-        }
-      }
-    }
+    where: { id: userId }
   })
 
   if (!user) {
@@ -82,27 +76,18 @@ export async function canCreateCoupon(
     }
   }
 
-  const planLimits = getPlanLimits(user.planType)
-  const maxAllowed = user.maxCupoms || planLimits.maxCupons
-
-  // Contar total de cupons do usuário em todas as coleções
-  const totalCoupons = user.collections.reduce((total, collection) => {
-    return total + collection._count.coupons
-  }, 0)
-
-  const canCreate = totalCoupons < maxAllowed
+  const canCreate = user.tokens > 0
 
   return {
     canCreate,
-    currentCount: totalCoupons,
-    maxAllowed,
+    currentCount: 0,
+    maxAllowed: user.tokens,
     planType: user.planType || 'free',
     errorMessage: canCreate
       ? undefined
-      : `Você atingiu o limite de ${maxAllowed} cupons do seu plano ${user.planType || 'gratuito'}. Faça upgrade para criar mais cupons.`
+      : `Você não tem tokens disponíveis. Adquira um plano para ganhar mais tokens.`
   }
 }
-
 /**
  * Obtém estatísticas de uso do usuário
  */
@@ -131,6 +116,7 @@ export async function getUserUsageStats(userId: string) {
 
   return {
     planType: user.planType || 'free',
+    tokens: user.tokens,
     collections: {
       current: user.collections.length,
       max: user.maxCollections || planLimits.maxCollections,
@@ -141,11 +127,7 @@ export async function getUserUsageStats(userId: string) {
       )
     },
     coupons: {
-      current: totalCoupons,
-      max: user.maxCupoms || planLimits.maxCupons,
-      percentage: Math.round(
-        (totalCoupons / (user.maxCupoms || planLimits.maxCupons)) * 100
-      )
+      total: totalCoupons
     }
   }
 }
