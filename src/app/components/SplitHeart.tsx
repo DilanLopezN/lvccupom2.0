@@ -9,6 +9,7 @@ type Props = {
   partnerName: string | null
   partnerPhoto: string | null
   onPhotoUpload?: (file: File) => void
+  onPartnerPhotoUpload?: (file: File) => void
 }
 
 export default function SplitHeart({
@@ -16,13 +17,20 @@ export default function SplitHeart({
   ownerPhoto,
   partnerName,
   partnerPhoto,
-  onPhotoUpload
+  onPhotoUpload,
+  onPartnerPhotoUpload
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
+  const partnerFileRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && onPhotoUpload) onPhotoUpload(file)
+  }
+
+  const handlePartnerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && onPartnerPhotoUpload) onPartnerPhotoUpload(file)
   }
 
   return (
@@ -90,7 +98,7 @@ export default function SplitHeart({
           />
         </svg>
 
-        {/* Botão câmera - dono */}
+        {/* Botão câmera - dono (lado esquerdo) */}
         {onPhotoUpload && (
           <button
             onClick={() => fileRef.current?.click()}
@@ -101,11 +109,29 @@ export default function SplitHeart({
           </button>
         )}
 
+        {/* Botão câmera - parceiro (lado direito) */}
+        {onPartnerPhotoUpload && (
+          <button
+            onClick={() => partnerFileRef.current?.click()}
+            className="absolute bottom-2 right-6 bg-white rounded-full p-1.5 shadow-md hover:bg-gray-100"
+            title="Alterar sua foto"
+          >
+            <Camera className="h-4 w-4 text-red-500" />
+          </button>
+        )}
+
         <input
           ref={fileRef}
           type="file"
           accept="image/*"
           onChange={handleFileChange}
+          className="hidden"
+        />
+        <input
+          ref={partnerFileRef}
+          type="file"
+          accept="image/*"
+          onChange={handlePartnerFileChange}
           className="hidden"
         />
       </div>

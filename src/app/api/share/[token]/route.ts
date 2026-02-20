@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
         },
         user: {
           select: {
-            name: true
+            name: true,
+            profileImage: true
           }
         }
       }

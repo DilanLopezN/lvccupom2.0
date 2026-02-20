@@ -10,6 +10,7 @@ import { SearchBar } from '@/app/components/Search'
 import { Heart, UserPlus, CheckCircle2, Coins, Flame } from 'lucide-react'
 import { formatDateBR } from '@/lib/utils'
 import { Coupon as CouponCardType } from '@/app/components/CupomCard'
+import SplitHeart from '@/app/components/SplitHeart'
 
 type Coupon = {
   id: string
@@ -34,6 +35,7 @@ type Collection = {
   shareToken: string
   user: {
     name: string
+    profileImage: string | null
   }
   coupons: Coupon[]
 }
@@ -65,6 +67,11 @@ export default function SharedCollection() {
   const [fulfillLoading, setFulfillLoading] = useState(false)
   const [fulfillMessage, setFulfillMessage] = useState<string | null>(null)
 
+  // Partner profile info (para o SplitHeart)
+  const [partnerProfileImage, setPartnerProfileImage] = useState<string | null>(
+    null
+  )
+
   useEffect(() => {
     const fetchCollection = async () => {
       try {
@@ -91,6 +98,36 @@ export default function SharedCollection() {
       fetchCollection()
     }
   }, [params.token])
+
+  // Buscar foto do parceiro logado para o SplitHeart
+  useEffect(() => {
+    const fetchPartnerProfile = async () => {
+      if (!session?.user) return
+      try {
+        const response = await fetch('/api/user/stats')
+        if (response.ok) {
+          const data = await response.json()
+          setPartnerProfileImage(data.profileImage || null)
+        }
+      } catch (err) {
+        console.error('Erro ao buscar perfil do parceiro:', err)
+      }
+    }
+    fetchPartnerProfile()
+  }, [session])
+
+  // Upload de foto do parceiro
+  const handlePartnerPhotoUpload = async (file: File) => {
+    const fd = new FormData()
+    fd.append('photo', file)
+    try {
+      const res = await fetch('/api/user/photo', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.imageUrl) setPartnerProfileImage(data.imageUrl)
+    } catch (err) {
+      console.error('Erro ao enviar foto:', err)
+    }
+  }
 
   const isCouponAvailable = (coupon: Coupon): boolean => {
     const now = new Date()
@@ -374,6 +411,17 @@ export default function SharedCollection() {
             Coleção de cupons criada por:{' '}
             <span className="font-medium">{collection.user.name}</span>
           </div>
+
+          {/* SplitHeart - mostrar quando o parceiro está logado */}
+          {session?.user && (
+            <SplitHeart
+              ownerName={collection.user.name}
+              ownerPhoto={collection.user.profileImage}
+              partnerName={session.user.name || 'Você'}
+              partnerPhoto={partnerProfileImage}
+              onPartnerPhotoUpload={handlePartnerPhotoUpload}
+            />
+          )}
 
           {/* Seção de parceiro(a) */}
           {!session?.user ? (
