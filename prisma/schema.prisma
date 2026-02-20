@@ -33,6 +33,7 @@ model User {
 
   // Fulfillments que este usuário confirmou (como parceiro recebedor)
   fulfillments CouponFulfillment[]
+  moodEntries  MoodEntry[]
 
   @@map("users")
 }
@@ -106,4 +107,20 @@ model CouponFulfillment {
   confirmedBy User   @relation(fields: [confirmedById], references: [id])
 
   @@map("coupon_fulfillments")
+}
+
+model MoodEntry {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  mood        String
+  emoji       String
+  note        String?
+  coinsEarned Boolean  @default(false) @map("coins_earned")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("mood_entries")
 }

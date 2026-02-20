@@ -11,7 +11,8 @@ import {
   AlertCircle,
   Crown,
   Coins,
-  Flame
+  Flame,
+  SmilePlus
 } from 'lucide-react'
 import { formatDateBR } from '@/lib/utils'
 import { plans } from '@/constants/plans'
@@ -44,6 +45,13 @@ type UserStats = {
   }
 }
 
+type PartnerMood = {
+  mood: string
+  emoji: string
+  note: string | null
+  createdAt: string
+}
+
 type Props = {
   session: any
 }
@@ -59,6 +67,7 @@ export default function DashboardClient({ session }: Props) {
     name: string
     profileImage: string | null
   } | null>(null)
+  const [partnerMood, setPartnerMood] = useState<PartnerMood | null>(null)
 
   const fetchData = async () => {
     try {
@@ -78,6 +87,13 @@ export default function DashboardClient({ session }: Props) {
         setUserStats(statsData)
         setProfileImage(statsData.profileImage || null)
         setPartnerInfo(statsData.partner || null)
+      }
+
+      // Buscar humor do parceiro
+      const moodResponse = await fetch('/api/mood')
+      if (moodResponse.ok) {
+        const moodData = await moodResponse.json()
+        setPartnerMood(moodData.partnerMood || null)
       }
     } catch (err) {
       console.error('Erro ao buscar dados:', err)
@@ -141,6 +157,13 @@ export default function DashboardClient({ session }: Props) {
     fetchData()
   }
 
+  const formatMoodTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
   return (
     <div className="text-black">
       <div className="flex justify-between items-center mb-6">
@@ -162,6 +185,33 @@ export default function DashboardClient({ session }: Props) {
         partnerPhoto={partnerInfo?.profileImage || null}
         onPhotoUpload={handlePhotoUpload}
       />
+
+      {/* Humor do parceiro */}
+      {partnerMood && partnerInfo && (
+        <div className="bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 rounded-lg p-4 mb-6 flex items-center">
+          <div className="text-4xl mr-4">{partnerMood.emoji}</div>
+          <div className="flex-1">
+            <div className="flex items-center mb-1">
+              <SmilePlus className="h-4 w-4 text-pink-500 mr-1" />
+              <span className="text-sm font-medium text-pink-700">
+                Humor de {partnerInfo.name}
+              </span>
+            </div>
+            <p className="text-base font-bold text-gray-800">
+              {partnerMood.mood}
+            </p>
+            {partnerMood.note && (
+              <p className="text-sm text-gray-600 italic mt-1">
+                "{partnerMood.note}"
+              </p>
+            )}
+            <p className="text-xs text-gray-400 mt-1">
+              às {formatMoodTime(partnerMood.createdAt)}
+            </p>
+          </div>
+          <Heart className="h-6 w-6 text-pink-400" fill="#f9a8d4" />
+        </div>
+      )}
 
       {userStats && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">

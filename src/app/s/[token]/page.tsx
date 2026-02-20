@@ -7,10 +7,19 @@ import { Header } from '@/app/components/Header'
 import { CouponModal } from '@/app/components/CupomModal'
 import { CouponGrid } from '@/app/components/CupomGrid'
 import { SearchBar } from '@/app/components/Search'
-import { Heart, UserPlus, CheckCircle2, Coins, Flame } from 'lucide-react'
+import {
+  Heart,
+  UserPlus,
+  CheckCircle2,
+  Coins,
+  Flame,
+  Gift,
+  SmilePlus
+} from 'lucide-react'
 import { formatDateBR } from '@/lib/utils'
 import { Coupon as CouponCardType } from '@/app/components/CupomCard'
 import SplitHeart from '@/app/components/SplitHeart'
+import MoodTab from '@/app/components/MoodTab'
 
 type Coupon = {
   id: string
@@ -52,6 +61,9 @@ export default function SharedCollection() {
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'coupons' | 'mood'>('coupons')
 
   // Partner registration state
   const [showPartnerForm, setShowPartnerForm] = useState(false)
@@ -524,17 +536,55 @@ export default function SharedCollection() {
           )}
         </div>
 
-        <SearchBar
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          categoryFilter={categoryFilter}
-          setCategoryFilter={setCategoryFilter}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          categories={categories}
-        />
+        {/* Tabs - só mostrar quando logado */}
+        {session?.user && (
+          <div className="flex mb-4 bg-white rounded-lg shadow-md overflow-hidden">
+            <button
+              onClick={() => setActiveTab('coupons')}
+              className={`flex-1 flex items-center justify-center py-3 text-sm font-medium transition-colors ${
+                activeTab === 'coupons'
+                  ? 'bg-gradient-to-r from-pink-500 to-red-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Gift className="h-4 w-4 mr-2" />
+              Cupons
+            </button>
+            <button
+              onClick={() => setActiveTab('mood')}
+              className={`flex-1 flex items-center justify-center py-3 text-sm font-medium transition-colors ${
+                activeTab === 'mood'
+                  ? 'bg-gradient-to-r from-pink-500 to-red-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <SmilePlus className="h-4 w-4 mr-2" />
+              Meu Humor
+            </button>
+          </div>
+        )}
 
-        <CouponGrid filteredCoupons={mappedCoupons} onCouponClick={openModal} />
+        {/* Conteúdo da tab ativa */}
+        {activeTab === 'coupons' || !session?.user ? (
+          <>
+            <SearchBar
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              categoryFilter={categoryFilter}
+              setCategoryFilter={setCategoryFilter}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              categories={categories}
+            />
+
+            <CouponGrid
+              filteredCoupons={mappedCoupons}
+              onCouponClick={openModal}
+            />
+          </>
+        ) : (
+          <MoodTab partnerName={collection.user.name} />
+        )}
       </div>
 
       {/* Modal do cupom com botão de fulfillment */}
