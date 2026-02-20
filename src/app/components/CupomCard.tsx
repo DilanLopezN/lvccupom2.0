@@ -70,7 +70,7 @@ export const CouponCard: React.FC<CouponCardProps> = ({ coupon, onClick }) => {
       <div className="p-4">
         <div className="flex justify-between items-center mb-2">
           <div className="flex items-center">
-            {getIcon(coupon.icon)}
+            {getIcon(coupon.icon, 'h-5 w-5 text-pink-500')}
             <span className="ml-2 text-xs py-1 px-2 bg-pink-100 text-pink-800 rounded-full">
               {coupon.category}
             </span>
